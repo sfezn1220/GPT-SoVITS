@@ -957,24 +957,26 @@ class SynthesizerTrn(nn.Module):
         return o, y_mask, (z, z_p, m_p, logs_p)
 
     @torch.no_grad()
-    def decode(self, codes, text, refer, noise_scale=0.5):
-        refer_lengths = torch.LongTensor([refer.size(2)]).to(refer.device)
-        refer_mask = torch.unsqueeze(
-            commons.sequence_mask(refer_lengths, refer.size(2)), 1
-        ).to(refer.dtype)
-        ge = self.ref_enc(refer * refer_mask, refer_mask)
+    def decode(self, pred_semantic, phones_tgt, refer_spec, noise_scale=0.5):
+        refer_spec_lengths = torch.LongTensor([refer_spec.size(2)]).to(refer_spec.device)
 
-        y_lengths = torch.LongTensor([codes.size(2) * 2]).to(codes.device)
-        text_lengths = torch.LongTensor([text.size(-1)]).to(text.device)
+        refer_spec_mask = torch.unsqueeze(
+            commons.sequence_mask(refer_spec_lengths, refer_spec.size(2)), 1
+        ).to(refer_spec.dtype)
 
-        quantized = self.quantizer.decode(codes)
+        ge = self.ref_enc(refer_spec * refer_spec_mask, refer_spec_mask)
+
+        y_lengths = torch.LongTensor([pred_semantic.size(2) * 2]).to(pred_semantic.device)
+        phones_lengths = torch.LongTensor([phones_tgt.size(-1)]).to(phones_tgt.device)
+
+        quantized = self.quantizer.decode(pred_semantic)
         if self.semantic_frame_rate == "25hz":
             quantized = F.interpolate(
                 quantized, size=int(quantized.shape[-1] * 2), mode="nearest"
             )
 
         x, m_p, logs_p, y_mask = self.enc_p(
-            quantized, y_lengths, text, text_lengths, ge
+            quantized, y_lengths, phones_tgt, phones_lengths, ge
         )
         z_p = m_p + torch.randn_like(m_p) * torch.exp(logs_p) * noise_scale
 
